@@ -31,8 +31,6 @@ import (
 type reportWorkflowCmdOptions struct {
 	codefreshToken        string
 	codefreshHost         string
-	argoServiceHost       string
-	argoServicePort       string
 	workflowID            string
 	verbose               bool
 	rejectTLSUnauthorized bool
@@ -55,8 +53,6 @@ var reportWorkflowCmd = &cobra.Command{
 func init() {
 	dieOnError(viper.BindEnv("codefresh-token", "CODEFRESH_TOKEN"))
 	dieOnError(viper.BindEnv("codefresh-host", "CODEFRESH_HOST"))
-	dieOnError(viper.BindEnv("argo-host", "ARGO_SERVER_SERVICE_HOST"))
-	dieOnError(viper.BindEnv("argo-port", "ARGO_SERVER_SERVICE_PORT"))
 	dieOnError(viper.BindEnv("workflow", "WORKFLOW_ID"))
 	dieOnError(viper.BindEnv("NODE_TLS_REJECT_UNAUTHORIZED"))
 
@@ -68,8 +64,6 @@ func init() {
 	reportWorkflowCmd.Flags().BoolVar(&reportWorkflowOptions.rejectTLSUnauthorized, "tls-reject-unauthorized", viper.GetBool("NODE_TLS_REJECT_UNAUTHORIZED"), "Disable certificate validation for TLS connections")
 	reportWorkflowCmd.Flags().StringVar(&reportWorkflowOptions.codefreshToken, "codefresh-token", viper.GetString("codefresh-token"), "Codefresh API token [$CODEFRESH_TOKEN]")
 	reportWorkflowCmd.Flags().StringVar(&reportWorkflowOptions.codefreshHost, "codefresh-host", viper.GetString("codefresh-host"), "Codefresh API host default [$CODEFRESH_HOST]")
-	reportWorkflowCmd.Flags().StringVar(&reportWorkflowOptions.argoServiceHost, "argo-host", viper.GetString("argo-host"), "Argo host [$ARGO_SERVER_SERVICE_HOST]")
-	reportWorkflowCmd.Flags().StringVar(&reportWorkflowOptions.argoServicePort, "argo-port", viper.GetString("argo-port"), "Argo port [$ARGO_SERVER_SERVICE_PORT]")
 	reportWorkflowCmd.Flags().StringVar(&reportWorkflowOptions.workflowID, "workflow", viper.GetString("workflow"), "Workflow ID to report the status [$WORKFLOW_ID]")
 
 	reportWorkflowCmd.Flags().VisitAll(func(f *pflag.Flag) {

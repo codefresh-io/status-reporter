@@ -15,21 +15,25 @@
 package cmd
 
 import (
+	"context"
 	"os"
-	"time"
 
 	"github.com/codefresh-io/status-reporter/pkg/logger"
 	"github.com/codefresh-io/status-reporter/pkg/reporter"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 type reportWorkflowStepCmdOptions struct {
 	codefreshToken        string
 	codefreshHost         string
-	argoServiceHost       string
-	argoServicePort       string
+	clusterURL            string
+	clusterCert           string
+	clusterToken          string
+	clusterNamespace      string
 	workflowID            string
 	step                  string
 	verbose               bool
@@ -53,10 +57,11 @@ var reportWorkflowStepCmd = &cobra.Command{
 func init() {
 	dieOnError(viper.BindEnv("codefresh-token", "CODEFRESH_TOKEN"))
 	dieOnError(viper.BindEnv("codefresh-host", "CODEFRESH_HOST"))
-	dieOnError(viper.BindEnv("argo-host", "ARGO_SERVER_SERVICE_HOST"))
-	dieOnError(viper.BindEnv("argo-port", "ARGO_SERVER_SERVICE_PORT"))
 	dieOnError(viper.BindEnv("workflow", "WORKFLOW_ID"))
-	dieOnError(viper.BindEnv("step", "STEP"))
+	dieOnError(viper.BindEnv("cluster-url", "CLUSTER_URL"))
+	dieOnError(viper.BindEnv("cluster-token", "CLUSTER_TOKEN"))
+	dieOnError(viper.BindEnv("cluster-namespace", "CLUSTER_NAMESPACE"))
+	dieOnError(viper.BindEnv("cluster-cert", "CLUSTER_CERT"))
 	dieOnError(viper.BindEnv("tls-reject-unauthorized", "NODE_TLS_REJECT_UNAUTHORIZED"))
 
 	viper.SetDefault("codefresh-host", defaultCodefreshHost)
@@ -67,10 +72,11 @@ func init() {
 	reportWorkflowStepCmd.Flags().BoolVar(&reportWorkflowStepOptions.rejectTLSUnauthorized, "tls-reject-unauthorized", viper.GetBool("NODE_TLS_REJECT_UNAUTHORIZED"), "Disable certificate validation for TLS connections")
 	reportWorkflowStepCmd.Flags().StringVar(&reportWorkflowStepOptions.codefreshToken, "codefresh-token", viper.GetString("codefresh-token"), "Codefresh API token [$CODEFRESH_TOKEN]")
 	reportWorkflowStepCmd.Flags().StringVar(&reportWorkflowStepOptions.codefreshHost, "codefresh-host", viper.GetString("codefresh-host"), "Codefresh API host default [$CODEFRESH_HOST]")
-	reportWorkflowStepCmd.Flags().StringVar(&reportWorkflowStepOptions.argoServiceHost, "argo-host", viper.GetString("argo-host"), "Argo host [$ARGO_SERVER_SERVICE_HOST]")
-	reportWorkflowStepCmd.Flags().StringVar(&reportWorkflowStepOptions.argoServicePort, "argo-port", viper.GetString("argo-port"), "Argo port [$ARGO_SERVER_SERVICE_PORT]")
+	reportWorkflowStepCmd.Flags().StringVar(&reportWorkflowStepOptions.clusterURL, "cluster-url", viper.GetString("cluster-url"), "API URL of the Kubernetes cluster [$CLUSTER_URL]")
+	reportWorkflowStepCmd.Flags().StringVar(&reportWorkflowStepOptions.clusterToken, "cluster-token", viper.GetString("cluster-token"), "Kubernetes auth token [$CLUSTER_TOKEN]")
+	reportWorkflowStepCmd.Flags().StringVar(&reportWorkflowStepOptions.clusterNamespace, "cluster-namespace", viper.GetString("cluster-namespace"), "Kubernetes namespace where the workflow is running [$CLUSTER_NAMESPACE]")
+	reportWorkflowStepCmd.Flags().StringVar(&reportWorkflowStepOptions.clusterCert, "cluster-cert", viper.GetString("cluster-cert"), "Signed certificated authority (base64 encoded) [$CLUSTER_CERT]")
 	reportWorkflowStepCmd.Flags().StringVar(&reportWorkflowStepOptions.workflowID, "workflow", viper.GetString("workflow"), "Workflow ID to report the status [$WORKFLOW_ID]")
-	reportWorkflowStepCmd.Flags().StringVar(&reportWorkflowStepOptions.step, "step", viper.GetString("step"), "Step name to report the status [$STEP]")
 
 	reportWorkflowStepCmd.Flags().VisitAll(func(f *pflag.Flag) {
 		if viper.IsSet(f.Name) && viper.GetString(f.Name) != "" {
@@ -95,14 +101,48 @@ func reportWorkflowStepStatus(options reportWorkflowStepCmdOptions) {
 
 	httpCleint := buildHTTPClient(options.rejectTLSUnauthorized)
 	cf := buildCodefreshClient(options.codefreshHost, options.codefreshToken, httpCleint, log)
+	kclient, err := BuildKubeClient(options.clusterURL, options.clusterToken, options.clusterCert)
+	dieOnError(err)
+	res, err := kclient.CoreV1().Pods(options.clusterNamespace).List(context.Background(), metav1.ListOptions{})
+	dieOnError(err)
+	log.Info("Found pods", "number", len(res.Items))
+	stream, err := kclient.CoreV1().Events(options.clusterNamespace).Watch(context.Background(), metav1.ListOptions{
+		// Request the API server only events for specific workflow
+		// LabelSelector: "",
+	})
+	dieOnError(err)
+	evChannel := stream.ResultChan()
 	for {
-		wssr := reporter.WorkflowStepStatusReporter{
-			CodefreshAPI: cf,
-			Logger:       log,
-			WorkflowID:   options.workflowID,
-			Step:         options.step,
+		if evChannel == nil {
+			break
 		}
-		dieOnError(wssr.Report(reporter.WorkflowFailed))
-		time.Sleep(1 * time.Second)
+		select {
+		case obj, ok := <-evChannel:
+			if !ok {
+				log.Info("Event channel is closed")
+				continue
+			}
+			ev := obj.Object.(*corev1.Event)
+			log.Info("Got event", "source", ev.Source.Component)
+			if ev.Source.Component != "workflow-controller" {
+				continue
+			}
+
+			if ev.InvolvedObject.Kind != "workflow" {
+				continue
+			}
+
+			// step finished
+			if ev.Reason == "WorkflowNodeSucceeded" {
+				wssr := reporter.WorkflowStepStatusReporter{
+					CodefreshAPI: cf,
+					Logger:       log,
+					WorkflowID:   options.workflowID,
+					Step:         options.step,
+				}
+				wssr.Report(reporter.WorkflowStepSucceded)
+			}
+
+		}
 	}
 }
