@@ -30,7 +30,7 @@ import (
 
 type reportWorkflowCmdOptions struct {
 	codefreshToken        string
-	codefreshHost         string
+	eventReportingURL     string
 	workflowID            string
 	verbose               bool
 	rejectTLSUnauthorized bool
@@ -52,18 +52,17 @@ var reportWorkflowCmd = &cobra.Command{
 
 func init() {
 	dieOnError(viper.BindEnv("codefresh-token", "CODEFRESH_TOKEN"))
-	dieOnError(viper.BindEnv("codefresh-host", "CODEFRESH_HOST"))
+	dieOnError(viper.BindEnv("event-reporting-url", "EVENT_REPORTING_URL"))
 	dieOnError(viper.BindEnv("workflow", "WORKFLOW_ID"))
 	dieOnError(viper.BindEnv("NODE_TLS_REJECT_UNAUTHORIZED"))
 
-	viper.SetDefault("codefresh-host", defaultCodefreshHost)
 	viper.SetDefault("port", "8080")
 	viper.SetDefault("NODE_TLS_REJECT_UNAUTHORIZED", "1")
 
 	reportWorkflowCmd.Flags().BoolVar(&reportWorkflowOptions.verbose, "verbose", viper.GetBool("verbose"), "Show more logs")
 	reportWorkflowCmd.Flags().BoolVar(&reportWorkflowOptions.rejectTLSUnauthorized, "tls-reject-unauthorized", viper.GetBool("NODE_TLS_REJECT_UNAUTHORIZED"), "Disable certificate validation for TLS connections")
 	reportWorkflowCmd.Flags().StringVar(&reportWorkflowOptions.codefreshToken, "codefresh-token", viper.GetString("codefresh-token"), "Codefresh API token [$CODEFRESH_TOKEN]")
-	reportWorkflowCmd.Flags().StringVar(&reportWorkflowOptions.codefreshHost, "codefresh-host", viper.GetString("codefresh-host"), "Codefresh API host default [$CODEFRESH_HOST]")
+	reportWorkflowCmd.Flags().StringVar(&reportWorkflowOptions.eventReportingURL, "event-reporting-url", viper.GetString("event-reporting-url"), "The endpoint to report statuses to")
 	reportWorkflowCmd.Flags().StringVar(&reportWorkflowOptions.workflowID, "workflow", viper.GetString("workflow"), "Workflow ID to report the status [$WORKFLOW_ID]")
 
 	reportWorkflowCmd.Flags().VisitAll(func(f *pflag.Flag) {
@@ -104,11 +103,11 @@ func reportWorkflowStatus(options reportWorkflowCmdOptions) {
 			httpHeaders.Add("User-Agent", fmt.Sprintf("codefresh-runner-%s", version))
 		}
 		cf = &codefresh.Codefresh{
-			Host:       options.codefreshHost,
-			Token:      options.codefreshToken,
-			Logger:     log.Fork("module", "service", "service", "codefresh"),
-			HTTPClient: &httpClient,
-			Headers:    httpHeaders,
+			EventReportingURL: options.eventReportingURL,
+			Token:             options.codefreshToken,
+			Logger:            log.Fork("module", "service", "service", "codefresh"),
+			HTTPClient:        &httpClient,
+			Headers:           httpHeaders,
 		}
 	}
 
@@ -117,5 +116,5 @@ func reportWorkflowStatus(options reportWorkflowCmdOptions) {
 		Logger:       log,
 		WorkflowID:   options.workflowID,
 	}
-	dieOnError(wsr.Report(reporter.WorkflowFailed))
+	dieOnError(wsr.Report(reporter.WorkflowFailed, nil))
 }

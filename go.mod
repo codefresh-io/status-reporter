@@ -11,6 +11,7 @@ require (
 	github.com/spf13/pflag v1.0.5
 	github.com/spf13/viper v1.7.1
 	github.com/stretchr/testify v1.6.1 // indirect
+	github.com/tektoncd/pipeline v0.18.1
 	go.uber.org/zap v1.16.0
 	golang.org/x/sys v0.0.0-20200930185726-fdedc70b468f // indirect
 	golang.org/x/text v0.3.4 // indirect
@@ -19,6 +20,9 @@ require (
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	k8s.io/api v0.19.4
 	k8s.io/apimachinery v0.19.4
-	k8s.io/client-go v0.19.4
+	k8s.io/client-go v11.0.1-0.20190805182717-6502b5e7b1b5+incompatible
 	k8s.io/utils v0.0.0-20201110183641-67b214c5f920 // indirect
+	knative.dev/pkg v0.0.0-20200922164940-4bf40ad82aab
 )
+
+replace k8s.io/client-go => k8s.io/client-go v0.19.4

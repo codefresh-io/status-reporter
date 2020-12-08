@@ -15,15 +15,18 @@
 package cmd
 
 import (
-	b64 "encoding/base64"
 	"crypto/tls"
+	b64 "encoding/base64"
 	"fmt"
 	"net/http"
 	"os"
+
 	"github.com/codefresh-io/status-reporter/pkg/codefresh"
 	"github.com/codefresh-io/status-reporter/pkg/logger"
+	"github.com/tektoncd/pipeline/pkg/client/clientset/versioned"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 )
 
 const (
@@ -41,17 +44,18 @@ func dieOnError(err error) {
 	}
 }
 
-func buildCodefreshClient(host string, token string, httpClient *http.Client, lgr logger.Logger) *codefresh.Codefresh {
+func buildCodefreshClient(eventReportingURL string, token string, httpClient *http.Client, lgr logger.Logger) *codefresh.Codefresh {
 	httpHeaders := http.Header{}
-	{
-		httpHeaders.Add("User-Agent", fmt.Sprintf("codefresh-status-reporter-%s", version))
-	}
+	httpHeaders.Add("User-Agent", fmt.Sprintf("codefresh-engine-v%s", version))
+	httpHeaders.Add("Codefresh-User-Agent-Type", "engine")
+	httpHeaders.Add("Codefresh-User-Agent-Version", fmt.Sprintf("%s", version))
+	httpHeaders.Add("Authorization", token)
+
 	return &codefresh.Codefresh{
-		Host:       host,
-		Token:      token,
-		Logger:     lgr,
-		HTTPClient: httpClient,
-		Headers:    httpHeaders,
+		EventReportingURL: eventReportingURL,
+		Logger:            lgr,
+		HTTPClient:        httpClient,
+		Headers:           httpHeaders,
 	}
 }
 
@@ -69,7 +73,6 @@ func buildHTTPClient(rejectTLSUnauthorized bool) *http.Client {
 	return &httpClient
 }
 
-
 func BuildKubeClient(host string, token string, b64crt string) (*kubernetes.Clientset, error) {
 	ca, err := b64.StdEncoding.DecodeString(b64crt)
 	if err != nil {
@@ -82,4 +85,28 @@ func BuildKubeClient(host string, token string, b64crt string) (*kubernetes.Clie
 			CAData: ca,
 		},
 	})
+}
+
+func BuildTektonClient(configPath, contextName string, inCluster bool) (*versioned.Clientset, error) {
+	var config *rest.Config
+	var err error
+	if inCluster {
+		config, err = rest.InClusterConfig()
+	} else {
+		config, err = clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
+			&clientcmd.ClientConfigLoadingRules{ExplicitPath: configPath},
+			&clientcmd.ConfigOverrides{
+				CurrentContext: contextName,
+			},
+		).ClientConfig()
+		if err != nil {
+			return BuildTektonClient(configPath, contextName, true) // try in-cluster
+		}
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	return versioned.NewForConfig(config)
 }
