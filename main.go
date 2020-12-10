@@ -13,7 +13,10 @@ limitations under the License.
 
 package main
 
-import "github.com/codefresh-io/status-reporter/cmd"
+import (
+	"github.com/codefresh-io/status-reporter/cmd"
+	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
+)
 
 func main() {
 	cmd.Execute()

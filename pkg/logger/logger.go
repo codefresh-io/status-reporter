@@ -12,6 +12,7 @@ type (
 	// Logger to print stuff
 	Logger interface {
 		Info(msg string, keysAndValues ...interface{})
+		Err(err error, msg string, keysAndValues ...interface{})
 		V(level int) Logger
 		Fork(keysAndValues ...interface{}) Logger
 	}
@@ -39,6 +40,10 @@ func New(options Options) Logger {
 func (l *log) Info(msg string, keysAndValues ...interface{}) {
 	l.lgr.Info(msg, keysAndValues...)
 }
+func (l *log) Err(err error, msg string, keysAndValues ...interface{}) {
+	l.lgr.Error(err, msg, keysAndValues...)
+}
+
 func (l *log) V(level int) Logger {
 	return &log{
 		lgr: l.lgr.V(level),

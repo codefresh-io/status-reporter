@@ -86,7 +86,7 @@ func init() {
 
 	dieOnError(reportWorkflowStepCmd.MarkFlagRequired("codefresh-token"))
 	dieOnError(reportWorkflowStepCmd.MarkFlagRequired("workflow"))
-	dieOnError(reportWorkflowStepCmd.MarkFlagRequired("step"))
+	// dieOnError(reportWorkflowStepCmd.MarkFlagRequired("step"))
 
 	rootCmd.AddCommand(reportWorkflowStepCmd)
 }
