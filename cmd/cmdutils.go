@@ -23,7 +23,9 @@ import (
 
 	"github.com/codefresh-io/status-reporter/pkg/codefresh"
 	"github.com/codefresh-io/status-reporter/pkg/logger"
-	"github.com/tektoncd/pipeline/pkg/client/clientset/versioned"
+	"github.com/codefresh-io/status-reporter/pkg/runtime"
+	"github.com/codefresh-io/status-reporter/pkg/runtime/argo"
+	"github.com/codefresh-io/status-reporter/pkg/runtime/tekton"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -33,8 +35,14 @@ const (
 	defaultCodefreshHost = "https://g.codefresh.io"
 )
 
+type runtimeConstructor func(*runtime.Options) (runtime.Runtime, error)
+
 var (
-	exit = os.Exit
+	exit     = os.Exit
+	runtimes = map[string]runtimeConstructor{
+		"tekton": tekton.New,
+		"argo":   argo.New,
+	}
 )
 
 func dieOnError(err error) {
@@ -87,7 +95,7 @@ func BuildKubeClient(host string, token string, b64crt string) (*kubernetes.Clie
 	})
 }
 
-func BuildTektonClient(configPath, contextName string, inCluster bool) (*versioned.Clientset, error) {
+func BuildRestConfig(configPath, contextName string, inCluster bool, logger logger.Logger) (*rest.Config, error) {
 	var config *rest.Config
 	var err error
 	if inCluster {
@@ -100,13 +108,14 @@ func BuildTektonClient(configPath, contextName string, inCluster bool) (*version
 			},
 		).ClientConfig()
 		if err != nil {
-			return BuildTektonClient(configPath, contextName, true) // try in-cluster
+			logger.Info("failed to load kubeconfig, trying in-cluster config")
+			return BuildRestConfig(configPath, contextName, true, logger) // try in-cluster
 		}
 	}
 
-	if err != nil {
-		return nil, err
-	}
+	return config, err
+}
 
-	return versioned.NewForConfig(config)
+func RuntimeFactory(runtimeType string, opt *runtime.Options) (runtime.Runtime, error) {
+	return runtimes[runtimeType](opt)
 }

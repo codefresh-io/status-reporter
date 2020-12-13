@@ -16,17 +16,13 @@ package cmd
 
 import (
 	"context"
-	"fmt"
 	"os"
 
 	"github.com/codefresh-io/status-reporter/pkg/logger"
-	"github.com/codefresh-io/status-reporter/pkg/reporter"
-	"github.com/codefresh-io/status-reporter/pkg/tekton"
+	"github.com/codefresh-io/status-reporter/pkg/runtime"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
-	tkn "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 var watchWorkflowCmdOptions struct {
@@ -36,6 +32,7 @@ var watchWorkflowCmdOptions struct {
 	configPath        string
 	contextName       string
 	workflowID        string
+	runtimeType       string
 	inCluster         bool
 	verbose           bool
 }
@@ -56,6 +53,7 @@ func init() {
 	dieOnError(viper.BindEnv("cluster-namespace", "CLUSTER_NAMESPACE"))
 	dieOnError(viper.BindEnv("config-path", "CONFIG_PATH"))
 	dieOnError(viper.BindEnv("context-name", "CONTEXT_NAME"))
+	dieOnError(viper.BindEnv("runtime-type", "RUNTIME_TYPE"))
 
 	viper.SetDefault("event-reporting-url", defaultCodefreshHost)
 	viper.SetDefault("port", "8080")
@@ -68,6 +66,7 @@ func init() {
 	watchWorkflowCmd.Flags().StringVar(&watchWorkflowCmdOptions.contextName, "context-name", viper.GetString("context-name"), "Kubernetes context name [$CONTEXT_NAME]")
 	watchWorkflowCmd.Flags().StringVar(&watchWorkflowCmdOptions.workflowID, "workflow", viper.GetString("workflow"), "Workflow ID to report the status [$WORKFLOW_ID]")
 	watchWorkflowCmd.Flags().BoolVar(&watchWorkflowCmdOptions.inCluster, "in-cluster", viper.GetBool("in-cluster"), "Should be true if running from inside the cluster")
+	watchWorkflowCmd.Flags().StringVar(&watchWorkflowCmdOptions.runtimeType, "runtime-type", viper.GetString("runtime-type"), "The type of the runtime environment [tekton/argo] [$RUNTIME_TYPE]")
 
 	watchWorkflowCmd.Flags().VisitAll(func(f *pflag.Flag) {
 		if viper.IsSet(f.Name) && viper.GetString(f.Name) != "" {
@@ -78,6 +77,7 @@ func init() {
 	dieOnError(watchWorkflowCmd.MarkFlagRequired("codefresh-token"))
 	dieOnError(watchWorkflowCmd.MarkFlagRequired("workflow"))
 	dieOnError(watchWorkflowCmd.MarkFlagRequired("cluster-namespace"))
+	dieOnError(watchWorkflowCmd.MarkFlagRequired("runtime-type"))
 
 	rootCmd.AddCommand(watchWorkflowCmd)
 }
@@ -89,97 +89,15 @@ func watchWorkflowStatus() {
 
 	httpClient := buildHTTPClient(true)
 	cf := buildCodefreshClient(watchWorkflowCmdOptions.eventReportingURL, watchWorkflowCmdOptions.codefreshToken, httpClient, log)
-	tektonClient, err := BuildTektonClient(watchWorkflowCmdOptions.configPath, watchWorkflowCmdOptions.contextName, watchWorkflowCmdOptions.inCluster)
+	cnf, err := BuildRestConfig(watchWorkflowCmdOptions.configPath, watchWorkflowCmdOptions.contextName, watchWorkflowCmdOptions.inCluster, log)
 	dieOnError(err)
 
-	watch, err := tektonClient.TektonV1beta1().PipelineRuns(watchWorkflowCmdOptions.clusterNamespace).Watch(context.TODO(), v1.ListOptions{
-		LabelSelector: fmt.Sprintf("tekton.dev/pipeline=%s", watchWorkflowCmdOptions.workflowID),
-		Watch:         true,
+	re, err := RuntimeFactory(watchWorkflowCmdOptions.runtimeType, &runtime.Options{
+		Logger: log,
+		Client: cf,
+		Config: cnf,
 	})
 	dieOnError(err)
 
-	log.Info("Watching tekton pipelines", "namespace", watchWorkflowCmdOptions.clusterNamespace)
-
-	workflow := reporter.NewWorkflow()
-	wsr := &reporter.WorkflowStatusReporter{
-		CodefreshAPI: cf,
-		Logger:       log,
-		WorkflowID:   watchWorkflowCmdOptions.workflowID,
-	}
-
-	for ev := range watch.ResultChan() {
-		pr, ok := ev.Object.(*tkn.PipelineRun)
-		if !ok {
-			log.Err(fmt.Errorf("Invalid object type"), "unexpected object type from event")
-		}
-		switch workflow.Status {
-		case reporter.WorkflowPending:
-			if handleWorkflowPending(workflow, pr, wsr) != nil {
-				log.Err(err, "failed to report workflow status")
-			}
-		case reporter.WorkflowRunning:
-			if handleWorkflowRunning(workflow, pr, wsr) != nil {
-				log.Err(err, "failed to report workflow status")
-			}
-		}
-		if tekton.PipelineHasFinished(pr) {
-			watch.Stop()
-			if handleWorkflowFinished(workflow, pr, wsr) != nil {
-				log.Err(err, "failed to report workflow status")
-			}
-			break
-		}
-	}
-
-	log.Info("Workflow finished, exiting")
-}
-
-func handleWorkflowPending(workflow *reporter.Workflow, pr *tkn.PipelineRun, wsr *reporter.WorkflowStatusReporter) error {
-	if tekton.PipelineHasStarted(pr) {
-		workflow.Status = reporter.WorkflowRunning
-		for _, t := range pr.Status.TaskRuns {
-			workflow.Steps[t.PipelineTaskName] = &reporter.WorkflowStep{Status: reporter.WorkflowStepPending}
-		}
-		return wsr.Report(reporter.WorkflowRunning, nil)
-	}
-	return nil
-}
-
-func handleWorkflowRunning(workflow *reporter.Workflow, pr *tkn.PipelineRun, wsr *reporter.WorkflowStatusReporter) error {
-	for _, trs := range pr.Status.TaskRuns {
-		if len(trs.Status.Steps) == 0 {
-			wsr.Logger.Info("skipping task status report, steps are not running yet", "task", trs.PipelineTaskName)
-			continue
-		}
-		stepName := trs.PipelineTaskName
-		step := workflow.Steps[stepName]
-		if step.Name == "" {
-			step.Name = trs.Status.Steps[0].Name
-		}
-		if tekton.HasStepStatusChanged(step, trs) {
-			newStatus, err := tekton.GetTaskStatus(trs)
-			if err != nil {
-				wsr.Logger.Err(err, "failed to get workflow step status")
-				continue
-			}
-			step.Status = newStatus
-			if newStatus == reporter.WorkflowStepFailed {
-				if err = wsr.ReportStep(step.Name, reporter.WorkflowStepFailed, tekton.TaskHasFailed(trs)); err != nil {
-					wsr.Logger.Err(err, "failed to report workflow step status")
-				}
-				continue
-			}
-			if err = wsr.ReportStep(step.Name, newStatus, nil); err != nil {
-				wsr.Logger.Err(err, "failed to report workflow step status")
-			}
-		}
-	}
-	return nil
-}
-
-func handleWorkflowFinished(workflow *reporter.Workflow, pr *tkn.PipelineRun, wsr *reporter.WorkflowStatusReporter) error {
-	if err := tekton.PipelineHasFailed(pr); err != nil {
-		return wsr.Report(reporter.WorkflowFailed, err)
-	}
-	return wsr.Report(reporter.WorkflowSucceded, nil)
+	err = re.Watch(context.TODO(), watchWorkflowCmdOptions.clusterNamespace, reportWorkflowOptions.workflowID)
 }

@@ -14,9 +14,10 @@
                 "CONFIG_PATH": "/Users/roikramer/.kube/config",
                 "CONTEXT_NAME": "roi-gke",
                 "CLUSTER_NAMESPACE": "tekton-pipelines",
-                "WORKFLOW_ID": "5fcf60790b48234c64e1cde0",
+                "WORKFLOW_ID": "5fc7a89174014236b2f1dc0e",
                 "CODEFRESH_TOKEN": "5fcf60800b48234c64e1cde5.a530276102b925a9992b0629e1e6256b",
                 "EVENT_REPORTING_URL": "http://192.168.99.1:30080/api/workflow/5fcf60790b48234c64e1cde0/event",
+                "RUNTIME_TYPE": "tekton",
             },
             "args": [
                 "watch"
