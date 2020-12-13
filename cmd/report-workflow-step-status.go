@@ -15,7 +15,6 @@
 package cmd
 
 import (
-	"context"
 	"os"
 
 	"github.com/codefresh-io/status-reporter/pkg/logger"
@@ -103,10 +102,10 @@ func reportWorkflowStepStatus(options reportWorkflowStepCmdOptions) {
 	cf := buildCodefreshClient(options.codefreshHost, options.codefreshToken, httpCleint, log)
 	kclient, err := BuildKubeClient(options.clusterURL, options.clusterToken, options.clusterCert)
 	dieOnError(err)
-	res, err := kclient.CoreV1().Pods(options.clusterNamespace).List(context.Background(), metav1.ListOptions{})
+	res, err := kclient.CoreV1().Pods(options.clusterNamespace).List(metav1.ListOptions{})
 	dieOnError(err)
 	log.Info("Found pods", "number", len(res.Items))
-	stream, err := kclient.CoreV1().Events(options.clusterNamespace).Watch(context.Background(), metav1.ListOptions{
+	stream, err := kclient.CoreV1().Events(options.clusterNamespace).Watch(metav1.ListOptions{
 		// Request the API server only events for specific workflow
 		// LabelSelector: "",
 	})

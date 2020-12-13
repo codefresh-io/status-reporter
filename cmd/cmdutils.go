@@ -25,7 +25,6 @@ import (
 	"github.com/codefresh-io/status-reporter/pkg/logger"
 	"github.com/codefresh-io/status-reporter/pkg/runtime"
 	"github.com/codefresh-io/status-reporter/pkg/runtime/argo"
-	"github.com/codefresh-io/status-reporter/pkg/runtime/tekton"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -40,8 +39,7 @@ type runtimeConstructor func(*runtime.Options) (runtime.Runtime, error)
 var (
 	exit     = os.Exit
 	runtimes = map[string]runtimeConstructor{
-		"tekton": tekton.New,
-		"argo":   argo.New,
+		"argo": argo.New,
 	}
 )
 

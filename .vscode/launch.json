@@ -22,6 +22,25 @@
             "args": [
                 "watch"
             ]
+        },
+        {
+            "name": "Launch Argo",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "${workspaceFolder}/main.go",
+            "env": {
+                "CONFIG_PATH": "/Users/roikramer/.kube/config",
+                "CONTEXT_NAME": "roi-gke",
+                "CLUSTER_NAMESPACE": "argo",
+                "WORKFLOW_ID": "5fd6392e67f46c187afd6e77",
+                "CODEFRESH_TOKEN": "5fd63ab967f46c187afd6e99.bf40b91200a8c93138efe2ca93d6d7a6",
+                "EVENT_REPORTING_URL": "http://192.168.99.1:30080/api/workflow/5fd6392e67f46c187afd6e77/event",
+                "RUNTIME_TYPE": "argo",
+            },
+            "args": [
+                "watch"
+            ]
         }
     ]
 }

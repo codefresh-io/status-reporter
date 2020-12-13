@@ -110,43 +110,43 @@ Loop:
 func handleWorkflowPending(workflow *reporter.Workflow, wf *wfv1.Workflow, wsr *reporter.WorkflowStatusReporter) error {
 	if hasWorkflowStarted(wf) {
 		workflow.Status = reporter.WorkflowRunning
-		// for _, t := range pr.Status.TaskRuns {
-		// 	workflow.Steps[t.PipelineTaskName] = &reporter.WorkflowStep{Status: reporter.WorkflowStepPending}
-		// }
+		for _, node := range wf.Status.Nodes {
+			tmpl := wf.GetTemplateByName(node.TemplateName)
+			if tmpl == nil || !tmpl.IsPodType() {
+				continue
+			}
+			workflow.Steps[node.DisplayName] = &reporter.WorkflowStep{Status: reporter.WorkflowStepPending, Name: node.DisplayName}
+		}
 		return wsr.Report(reporter.WorkflowRunning, nil)
 	}
 	return nil
 }
 
 func handleWorkflowRunning(workflow *reporter.Workflow, wf *wfv1.Workflow, wsr *reporter.WorkflowStatusReporter) error {
-	// for _, trs := range pr.Status.TaskRuns {
-	// 	if len(trs.Status.Steps) == 0 {
-	// 		wsr.Logger.Info("skipping task status report, steps are not running yet", "task", trs.PipelineTaskName)
-	// 		continue
-	// 	}
-	// 	stepName := trs.PipelineTaskName
-	// 	step := workflow.Steps[stepName]
-	// 	if step.Name == "" {
-	// 		step.Name = trs.Status.Steps[0].Name
-	// 	}
-	// 	if HasStepStatusChanged(step, trs) {
-	// 		newStatus, err := GetTaskStatus(trs)
-	// 		if err != nil {
-	// 			wsr.Logger.Err(err, "failed to get workflow step status")
-	// 			continue
-	// 		}
-	// 		step.Status = newStatus
-	// 		if newStatus == reporter.WorkflowStepFailed {
-	// 			if err = wsr.ReportStep(step.Name, reporter.WorkflowStepFailed, TaskHasFailed(trs)); err != nil {
-	// 				wsr.Logger.Err(err, "failed to report workflow step status")
-	// 			}
-	// 			continue
-	// 		}
-	// 		if err = wsr.ReportStep(step.Name, newStatus, nil); err != nil {
-	// 			wsr.Logger.Err(err, "failed to report workflow step status")
-	// 		}
-	// 	}
-	// }
+	for _, node := range wf.Status.Nodes {
+		tmpl := wf.GetTemplateByName(node.TemplateName)
+		if tmpl == nil || !tmpl.IsPodType() {
+			continue
+		}
+		step, exists := workflow.Steps[node.DisplayName]
+		if !exists {
+			wsr.Logger.Info("Step status reported but the step does not exits", "step", node.DisplayName)
+		}
+		if hasStepStatusChanged(step, &node) {
+			step.Status = getStepStatus(&node)
+			if step.Status == reporter.WorkflowStepFailed {
+				if err := wsr.ReportStep(step.Name, reporter.WorkflowStepFailed, getStepError(&node)); err != nil {
+					wsr.Logger.Err(err, "failed to report workflow step status")
+				}
+				continue
+			}
+			if err := wsr.ReportStep(step.Name, step.Status, nil); err != nil {
+				wsr.Logger.Err(err, "failed to report workflow step status")
+			}
+			continue
+		}
+	}
+
 	return nil
 }
 
