@@ -110,19 +110,14 @@ Loop:
 func handleWorkflowPending(workflow *reporter.Workflow, wf *wfv1.Workflow, wsr *reporter.WorkflowStatusReporter) error {
 	if hasWorkflowStarted(wf) {
 		workflow.Status = reporter.WorkflowRunning
-		for _, node := range wf.Status.Nodes {
-			tmpl := wf.GetTemplateByName(node.TemplateName)
-			if tmpl == nil || !tmpl.IsPodType() {
-				continue
-			}
-			workflow.Steps[node.DisplayName] = &reporter.WorkflowStep{Status: reporter.WorkflowStepPending, Name: node.DisplayName}
-		}
+		addNewSteps(wf, workflow)
 		return wsr.Report(reporter.WorkflowRunning, nil)
 	}
 	return nil
 }
 
 func handleWorkflowRunning(workflow *reporter.Workflow, wf *wfv1.Workflow, wsr *reporter.WorkflowStatusReporter) error {
+	addNewSteps(wf, workflow)
 	for _, node := range wf.Status.Nodes {
 		tmpl := wf.GetTemplateByName(node.TemplateName)
 		if tmpl == nil || !tmpl.IsPodType() {

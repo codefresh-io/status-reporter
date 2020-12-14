@@ -79,3 +79,16 @@ func hasStepFailed(n *wfv1.NodeStatus) bool {
 func getStepError(n *wfv1.NodeStatus) error {
 	return fmt.Errorf("step %s failed with: %s", n.DisplayName, n.Message)
 }
+
+func addNewSteps(wf *wfv1.Workflow, cfwf *reporter.Workflow) {
+	for _, node := range wf.Status.Nodes {
+		tmpl := wf.GetTemplateByName(node.TemplateName)
+		if tmpl == nil || !tmpl.IsPodType() {
+			continue
+		}
+		if _, exists := cfwf.Steps[node.DisplayName]; exists {
+			continue
+		}
+		cfwf.Steps[node.DisplayName] = &reporter.WorkflowStep{Status: reporter.WorkflowStepPending, Name: node.DisplayName}
+	}
+}

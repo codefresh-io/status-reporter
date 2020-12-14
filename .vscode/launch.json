@@ -33,9 +33,9 @@
                 "CONFIG_PATH": "/Users/roikramer/.kube/config",
                 "CONTEXT_NAME": "roi-gke",
                 "CLUSTER_NAMESPACE": "argo",
-                "WORKFLOW_ID": "5fd6392e67f46c187afd6e77",
-                "CODEFRESH_TOKEN": "5fd63ab967f46c187afd6e99.bf40b91200a8c93138efe2ca93d6d7a6",
-                "EVENT_REPORTING_URL": "http://192.168.99.1:30080/api/workflow/5fd6392e67f46c187afd6e77/event",
+                "WORKFLOW_ID": "5fd717d867f46c187afd6fdc",
+                "CODEFRESH_TOKEN": "5fd717d967f46c187afd6fe1.2265831936511006a468eec35e1c06a6",
+                "EVENT_REPORTING_URL": "http://192.168.99.1:30080/api/workflow/5fd717d867f46c187afd6fdc/event",
                 "RUNTIME_TYPE": "argo",
             },
             "args": [
