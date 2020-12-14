@@ -16,15 +16,14 @@ package cmd
 
 import (
 	"crypto/tls"
-	b64 "encoding/base64"
 	"fmt"
 	"net/http"
 	"os"
 
 	"github.com/codefresh-io/status-reporter/pkg/codefresh"
 	"github.com/codefresh-io/status-reporter/pkg/logger"
-	"github.com/tektoncd/pipeline/pkg/client/clientset/versioned"
-	"k8s.io/client-go/kubernetes"
+	"github.com/codefresh-io/status-reporter/pkg/runtime"
+	"github.com/codefresh-io/status-reporter/pkg/runtime/argo"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 )
@@ -33,8 +32,13 @@ const (
 	defaultCodefreshHost = "https://g.codefresh.io"
 )
 
+type runtimeConstructor func(*runtime.Options) (runtime.Runtime, error)
+
 var (
-	exit = os.Exit
+	exit     = os.Exit
+	runtimes = map[string]runtimeConstructor{
+		"argo": argo.New,
+	}
 )
 
 func dieOnError(err error) {
@@ -73,21 +77,7 @@ func buildHTTPClient(rejectTLSUnauthorized bool) *http.Client {
 	return &httpClient
 }
 
-func BuildKubeClient(host string, token string, b64crt string) (*kubernetes.Clientset, error) {
-	ca, err := b64.StdEncoding.DecodeString(b64crt)
-	if err != nil {
-		return nil, err
-	}
-	return kubernetes.NewForConfig(&rest.Config{
-		Host:        host,
-		BearerToken: token,
-		TLSClientConfig: rest.TLSClientConfig{
-			CAData: ca,
-		},
-	})
-}
-
-func BuildTektonClient(configPath, contextName string, inCluster bool) (*versioned.Clientset, error) {
+func BuildRestConfig(configPath, contextName string, inCluster bool, logger logger.Logger) (*rest.Config, error) {
 	var config *rest.Config
 	var err error
 	if inCluster {
@@ -100,13 +90,14 @@ func BuildTektonClient(configPath, contextName string, inCluster bool) (*version
 			},
 		).ClientConfig()
 		if err != nil {
-			return BuildTektonClient(configPath, contextName, true) // try in-cluster
+			logger.Info("failed to load kubeconfig, trying in-cluster config")
+			return BuildRestConfig(configPath, contextName, true, logger) // try in-cluster
 		}
 	}
 
-	if err != nil {
-		return nil, err
-	}
+	return config, err
+}
 
-	return versioned.NewForConfig(config)
+func RuntimeFactory(runtimeType string, opt *runtime.Options) (runtime.Runtime, error) {
+	return runtimes[runtimeType](opt)
 }

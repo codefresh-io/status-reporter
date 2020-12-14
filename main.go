@@ -15,7 +15,7 @@ package main
 
 import (
 	"github.com/codefresh-io/status-reporter/cmd"
-	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
+	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp" // for gcp authentication support
 )
 
 func main() {
