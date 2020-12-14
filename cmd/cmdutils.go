@@ -16,7 +16,6 @@ package cmd
 
 import (
 	"crypto/tls"
-	b64 "encoding/base64"
 	"fmt"
 	"net/http"
 	"os"
@@ -25,7 +24,6 @@ import (
 	"github.com/codefresh-io/status-reporter/pkg/logger"
 	"github.com/codefresh-io/status-reporter/pkg/runtime"
 	"github.com/codefresh-io/status-reporter/pkg/runtime/argo"
-	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 )
@@ -77,20 +75,6 @@ func buildHTTPClient(rejectTLSUnauthorized bool) *http.Client {
 	}
 
 	return &httpClient
-}
-
-func BuildKubeClient(host string, token string, b64crt string) (*kubernetes.Clientset, error) {
-	ca, err := b64.StdEncoding.DecodeString(b64crt)
-	if err != nil {
-		return nil, err
-	}
-	return kubernetes.NewForConfig(&rest.Config{
-		Host:        host,
-		BearerToken: token,
-		TLSClientConfig: rest.TLSClientConfig{
-			CAData: ca,
-		},
-	})
 }
 
 func BuildRestConfig(configPath, contextName string, inCluster bool, logger logger.Logger) (*rest.Config, error) {

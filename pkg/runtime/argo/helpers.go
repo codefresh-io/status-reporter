@@ -69,11 +69,11 @@ func wasStepSkipped(n *wfv1.NodeStatus) bool {
 }
 
 func wasStepSuccessful(n *wfv1.NodeStatus) bool {
-	return n.Successful()
+	return n.Succeeded()
 }
 
 func hasStepFailed(n *wfv1.NodeStatus) bool {
-	return !n.Successful()
+	return n.FailedOrError()
 }
 
 func getStepError(n *wfv1.NodeStatus) error {
